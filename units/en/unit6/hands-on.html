@@ -1,0 +1,476 @@
+<h1
+id="advantage-actor-critic-a2c-using-robotics-simulations-with-pybullet-and-panda-gym-hands-on">Advantage
+Actor Critic (A2C) using Robotics Simulations with PyBullet and
+Panda-Gym 🤖 [[hands-on]]</h1>
+<pre><code>  &lt;CourseFloatingBanner classNames=&quot;absolute z-10 right-0 top-0&quot;
+  notebooks={[
+    {label: &quot;Google Colab&quot;, value: &quot;https://colab.research.google.com/github/huggingface/deep-rl-class/blob/main/notebooks/unit6/unit6.ipynb&quot;}
+    ]}
+    askForHelpUrl=&quot;http://hf.co/join/discord&quot; /&gt;</code></pre>
+<p>Now that you’ve studied the theory behind Advantage Actor Critic
+(A2C), <strong>you’re ready to train your A2C agent</strong> using
+Stable-Baselines3 in robotic environments. And train two robots:</p>
+<ul>
+<li>A spider 🕷️ to learn to move.</li>
+<li>A robotic arm 🦾 to move to the correct position.</li>
+</ul>
+<p>We’re going to use two Robotics environments:</p>
+<ul>
+<li><a href="https://github.com/bulletphysics/bullet3">PyBullet</a></li>
+<li><a
+href="https://github.com/qgallouedec/panda-gym">panda-gym</a></li>
+</ul>
+<figure>
+<img src="./images/environments.gif" alt="xxx" />
+<figcaption aria-hidden="true">xxx</figcaption>
+</figure>
+<p>To validate this hands-on for the certification process, you need to
+push your two trained models to the Hub and get the following
+results:</p>
+<ul>
+<li><code>AntBulletEnv-v0</code> get a result of &gt;= 650.</li>
+<li><code>PandaReachDense-v2</code> get a result of &gt;= -3.5.</li>
+</ul>
+<p>To find your result, <a
+href="https://huggingface.co/spaces/huggingface-projects/Deep-Reinforcement-Learning-Leaderboard">go
+to the leaderboard</a> and find your model, <strong>the result =
+mean_reward - std of reward</strong></p>
+<p><strong>If you don’t find your model, go to the bottom of the page
+and click on the refresh button.</strong></p>
+<p>For more information about the certification process, check this
+section 👉
+https://huggingface.co/deep-rl-course/en/unit0/introduction#certification-process</p>
+<p><strong>To start the hands-on click on Open In Colab button</strong>
+👇 :</p>
+<p><a
+href="https://colab.research.google.com/github/huggingface/deep-rl-class/blob/master/notebooks/unit6/unit6.ipynb"><img
+src="https://colab.research.google.com/assets/colab-badge.svg"
+alt="Open In Colab" /></a></p>
+<h1
+id="unit-6-advantage-actor-critic-a2c-using-robotics-simulations-with-pybullet-and-panda-gym">Unit
+6: Advantage Actor Critic (A2C) using Robotics Simulations with PyBullet
+and Panda-Gym 🤖</h1>
+<h3 id="environments">🎮 Environments:</h3>
+<ul>
+<li><a href="https://github.com/bulletphysics/bullet3">PyBullet</a></li>
+<li><a
+href="https://github.com/qgallouedec/panda-gym">Panda-Gym</a></li>
+</ul>
+<h3 id="rl-library">📚 RL-Library:</h3>
+<ul>
+<li><a
+href="https://stable-baselines3.readthedocs.io/">Stable-Baselines3</a></li>
+</ul>
+<p>We’re constantly trying to improve our tutorials, so <strong>if you
+find some issues in this notebook</strong>, please <a
+href="https://github.com/huggingface/deep-rl-class/issues">open an issue
+on the GitHub Repo</a>.</p>
+<h2 id="objectives-of-this-notebook">Objectives of this notebook 🏆</h2>
+<p>At the end of the notebook, you will:</p>
+<ul>
+<li>Be able to use the environment librairies <strong>PyBullet</strong>
+and <strong>Panda-Gym</strong>.</li>
+<li>Be able to <strong>train robots using A2C</strong>.</li>
+<li>Understand why <strong>we need to normalize the input</strong>.</li>
+<li>Be able to <strong>push your trained agent and the code to the
+Hub</strong> with a nice video replay and an evaluation score 🔥.</li>
+</ul>
+<h2 id="prerequisites">Prerequisites 🏗️</h2>
+<p>Before diving into the notebook, you need to:</p>
+<p>🔲 📚 Study <a
+href="https://huggingface.co/deep-rl-course/unit6/introduction">Actor-Critic
+methods by reading Unit 6</a> 🤗</p>
+<h1 id="lets-train-our-first-robots">Let’s train our first robots
+🤖</h1>
+<h2 id="set-the-gpu">Set the GPU 💪</h2>
+<ul>
+<li>To <strong>accelerate the agent’s training, we’ll use a
+GPU</strong>. To do that, go to
+<code>Runtime &gt; Change Runtime type</code></li>
+</ul>
+<figure>
+<img src="./images/gpu-step1.jpg" alt="xxx" />
+<figcaption aria-hidden="true">xxx</figcaption>
+</figure>
+<ul>
+<li><code>Hardware Accelerator &gt; GPU</code></li>
+</ul>
+<figure>
+<img src="./images/gpu-step2.jpg" alt="xxx" />
+<figcaption aria-hidden="true">xxx</figcaption>
+</figure>
+<h2 id="create-a-virtual-display">Create a virtual display 🔽</h2>
+<p>During the notebook, we’ll need to generate a replay video. To do so,
+with colab, <strong>we need to have a virtual screen to be able to
+render the environment</strong> (and thus record the frames).</p>
+<p>The following cell will install the librairies and create and run a
+virtual screen 🖥</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="op">%%</span>capture</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="op">!</span>apt install python<span class="op">-</span>opengl</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="op">!</span>apt install ffmpeg</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="op">!</span>apt install xvfb</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="op">!</span>pip3 install pyvirtualdisplay</span></code></pre></div>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Virtual display</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> pyvirtualdisplay <span class="im">import</span> Display</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>virtual_display <span class="op">=</span> Display(visible<span class="op">=</span><span class="dv">0</span>, size<span class="op">=</span>(<span class="dv">1400</span>, <span class="dv">900</span>))</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>virtual_display.start()</span></code></pre></div>
+<h3 id="install-dependencies">Install dependencies 🔽</h3>
+<p>The first step is to install the dependencies, we’ll install multiple
+ones:</p>
+<ul>
+<li><code>pybullet</code>: Contains the walking robots
+environments.</li>
+<li><code>panda-gym</code>: Contains the robotics arm environments.</li>
+<li><code>stable-baselines3[extra]</code>: The SB3 deep reinforcement
+learning library.</li>
+<li><code>huggingface_sb3</code>: Additional code for Stable-baselines3
+to load and upload models from the Hugging Face 🤗 Hub.</li>
+<li><code>huggingface_hub</code>: Library allowing anyone to work with
+the Hub repositories.</li>
+</ul>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="ex">!pip</span> install <span class="at">-r</span> https://raw.githubusercontent.com/huggingface/deep-rl-class/main/notebooks/unit6/requirements-unit6.txt</span></code></pre></div>
+<h2 id="import-the-packages">Import the packages 📦</h2>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pybullet_envs</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> panda_gym</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> gym</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> os</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> huggingface_sb3 <span class="im">import</span> load_from_hub, package_to_hub</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> stable_baselines3 <span class="im">import</span> A2C</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> stable_baselines3.common.evaluation <span class="im">import</span> evaluate_policy</span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> stable_baselines3.common.vec_env <span class="im">import</span> DummyVecEnv, VecNormalize</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> stable_baselines3.common.env_util <span class="im">import</span> make_vec_env</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> huggingface_hub <span class="im">import</span> notebook_login</span></code></pre></div>
+<h2 id="environment-1-antbulletenv-v0">Environment 1: AntBulletEnv-v0
+🕸</h2>
+<h3 id="create-the-antbulletenv-v0">Create the AntBulletEnv-v0</h3>
+<h4 id="the-environment">The environment 🎮</h4>
+<p>In this environment, the agent needs to use its different joints
+correctly in order to walk. You can find a detailled explanation of this
+environment here: https://hackmd.io/<span class="citation"
+data-cites="jeffreymo/SJJrSJh5_#PyBullet">@jeffreymo/SJJrSJh5_#PyBullet</span></p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>env_id <span class="op">=</span> <span class="st">&quot;AntBulletEnv-v0&quot;</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="co"># Create the env</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>env <span class="op">=</span> gym.make(env_id)</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Get the state space and action space</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>s_size <span class="op">=</span> env.observation_space.shape[<span class="dv">0</span>]</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>a_size <span class="op">=</span> env.action_space</span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;_____OBSERVATION SPACE_____ </span><span class="ch">\n</span><span class="st">&quot;</span>)</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;The State Space is: &quot;</span>, s_size)</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;Sample observation&quot;</span>, env.observation_space.sample())  <span class="co"># Get a random observation</span></span></code></pre></div>
+<p>The observation Space (from <a
+href="https://hackmd.io/@jeffreymo/SJJrSJh5_#PyBullet">Jeffrey Y
+Mo</a>): The difference is that our observation space is 28 not 29.</p>
+<figure>
+<img src="./images/obs_space.png" alt="xxx" />
+<figcaption aria-hidden="true">xxx</figcaption>
+</figure>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;</span><span class="ch">\n</span><span class="st"> _____ACTION SPACE_____ </span><span class="ch">\n</span><span class="st">&quot;</span>)</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;The Action Space is: &quot;</span>, a_size)</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;Action Space Sample&quot;</span>, env.action_space.sample())  <span class="co"># Take a random action</span></span></code></pre></div>
+<p>The action Space (from <a
+href="https://hackmd.io/@jeffreymo/SJJrSJh5_#PyBullet">Jeffrey Y
+Mo</a>):</p>
+<figure>
+<img src="./images/action_space.png" alt="xxx" />
+<figcaption aria-hidden="true">xxx</figcaption>
+</figure>
+<h3 id="normalize-observation-and-rewards">Normalize observation and
+rewards</h3>
+<p>A good practice in reinforcement learning is to <a
+href="https://stable-baselines3.readthedocs.io/en/master/guide/rl_tips.html">normalize
+input features</a>.</p>
+<p>For that purpose, there is a wrapper that will compute a running
+average and standard deviation of input features.</p>
+<p>We also normalize rewards with this same wrapper by adding
+<code>norm_reward = True</code></p>
+<p><a
+href="https://stable-baselines3.readthedocs.io/en/master/guide/vec_envs.html#vecnormalize">You
+should check the documentation to fill this cell</a></p>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>env <span class="op">=</span> make_vec_env(env_id, n_envs<span class="op">=</span><span class="dv">4</span>)</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Adding this wrapper to normalize the observation and the reward</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>env <span class="op">=</span> <span class="co"># </span><span class="al">TODO</span><span class="co">: Add the wrapper</span></span></code></pre></div>
+<h4 id="solution">Solution</h4>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>env <span class="op">=</span> make_vec_env(env_id, n_envs<span class="op">=</span><span class="dv">4</span>)</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>env <span class="op">=</span> VecNormalize(env, norm_obs<span class="op">=</span><span class="va">True</span>, norm_reward<span class="op">=</span><span class="va">True</span>, clip_obs<span class="op">=</span><span class="fl">10.0</span>)</span></code></pre></div>
+<h3 id="create-the-a2c-model">Create the A2C Model 🤖</h3>
+<p>In this case, because we have a vector of 28 values as input, we’ll
+use an MLP (multi-layer perceptron) as policy.</p>
+<p>For more information about A2C implementation with StableBaselines3
+check:
+https://stable-baselines3.readthedocs.io/en/master/modules/a2c.html#notes</p>
+<p>To find the best parameters I checked the <a
+href="https://huggingface.co/sb3">official trained agents by
+Stable-Baselines3 team</a>.</p>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> <span class="co"># Create the A2C model and try to find the best parameters</span></span></code></pre></div>
+<h4 id="solution-1">Solution</h4>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> A2C(</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>    policy<span class="op">=</span><span class="st">&quot;MlpPolicy&quot;</span>,</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>    env<span class="op">=</span>env,</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    gae_lambda<span class="op">=</span><span class="fl">0.9</span>,</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    gamma<span class="op">=</span><span class="fl">0.99</span>,</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    learning_rate<span class="op">=</span><span class="fl">0.00096</span>,</span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>    max_grad_norm<span class="op">=</span><span class="fl">0.5</span>,</span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    n_steps<span class="op">=</span><span class="dv">8</span>,</span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>    vf_coef<span class="op">=</span><span class="fl">0.4</span>,</span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>    ent_coef<span class="op">=</span><span class="fl">0.0</span>,</span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>    policy_kwargs<span class="op">=</span><span class="bu">dict</span>(log_std_init<span class="op">=-</span><span class="dv">2</span>, ortho_init<span class="op">=</span><span class="va">False</span>),</span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>    normalize_advantage<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>    use_rms_prop<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>    use_sde<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>    verbose<span class="op">=</span><span class="dv">1</span>,</span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div>
+<h3 id="train-the-a2c-agent">Train the A2C agent 🏃</h3>
+<ul>
+<li>Let’s train our agent for 2,000,000 timesteps. Don’t forget to use
+GPU on Colab. It will take approximately ~25-40min</li>
+</ul>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>model.learn(<span class="dv">2_000_000</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Save the model and  VecNormalize statistics when saving the agent</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>model.save(<span class="st">&quot;a2c-AntBulletEnv-v0&quot;</span>)</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>env.save(<span class="st">&quot;vec_normalize.pkl&quot;</span>)</span></code></pre></div>
+<h3 id="evaluate-the-agent">Evaluate the agent 📈</h3>
+<ul>
+<li>Now that our agent is trained, we need to <strong>check its
+performance</strong>.</li>
+<li>Stable-Baselines3 provides a method to do that:
+<code>evaluate_policy</code></li>
+<li>In my case, I got a mean reward of
+<code>2371.90 +/- 16.50</code></li>
+</ul>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> stable_baselines3.common.vec_env <span class="im">import</span> DummyVecEnv, VecNormalize</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Load the saved statistics</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>eval_env <span class="op">=</span> DummyVecEnv([<span class="kw">lambda</span>: gym.make(<span class="st">&quot;AntBulletEnv-v0&quot;</span>)])</span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>eval_env <span class="op">=</span> VecNormalize.load(<span class="st">&quot;vec_normalize.pkl&quot;</span>, eval_env)</span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a><span class="co">#  do not update them at test time</span></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>eval_env.training <span class="op">=</span> <span class="va">False</span></span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a><span class="co"># reward normalization is not needed at test time</span></span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a>eval_env.norm_reward <span class="op">=</span> <span class="va">False</span></span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Load the agent</span></span>
+<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> A2C.load(<span class="st">&quot;a2c-AntBulletEnv-v0&quot;</span>)</span>
+<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a>mean_reward, std_reward <span class="op">=</span> evaluate_policy(model, env)</span>
+<span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-17"><a href="#cb15-17" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f&quot;Mean reward = </span><span class="sc">{</span>mean_reward<span class="sc">:.2f}</span><span class="ss"> +/- </span><span class="sc">{</span>std_reward<span class="sc">:.2f}</span><span class="ss">&quot;</span>)</span></code></pre></div>
+<h3 id="publish-your-trained-model-on-the-hub">Publish your trained
+model on the Hub 🔥</h3>
+<p>Now that we saw we got good results after the training, we can
+publish our trained model on the Hub with one line of code.</p>
+<p>📚 The libraries documentation 👉
+https://github.com/huggingface/huggingface_sb3/tree/main#hugging-face–x-stable-baselines3-v20</p>
+<p>Here’s an example of a Model Card (with a PyBullet environment):</p>
+<figure>
+<img src="./images/modelcardpybullet.png" alt="xxx" />
+<figcaption aria-hidden="true">xxx</figcaption>
+</figure>
+<p>By using <code>package_to_hub</code>, as we already mentionned in the
+former units, <strong>you evaluate, record a replay, generate a model
+card of your agent and push it to the hub</strong>.</p>
+<p>This way: - You can <strong>showcase our work</strong> 🔥 - You can
+<strong>visualize your agent playing</strong> 👀 - You can <strong>share
+an agent with the community that others can use</strong> 💾 - You can
+<strong>access a leaderboard 🏆 to see how well your agent is performing
+compared to your classmates</strong> 👉
+https://huggingface.co/spaces/huggingface-projects/Deep-Reinforcement-Learning-Leaderboard</p>
+<p>To be able to share your model with the community there are three
+more steps to follow:</p>
+<p>1️⃣ (If it’s not already done) create an account to HF ➡
+https://huggingface.co/join</p>
+<p>2️⃣ Sign in and then you need to get your authentication token from
+the Hugging Face website. - Create a new token
+(https://huggingface.co/settings/tokens) <strong>with write
+role</strong></p>
+<figure>
+<img src="./images/create-token.jpg" alt="xxx" />
+<figcaption aria-hidden="true">xxx</figcaption>
+</figure>
+<ul>
+<li>Copy the token</li>
+<li>Run the cell below and paste the token</li>
+</ul>
+<div class="sourceCode" id="cb16"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>notebook_login()</span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="op">!</span>git config <span class="op">--</span><span class="kw">global</span> credential.helper store</span></code></pre></div>
+<p>If you don’t want to use Google Colab or a Jupyter Notebook, you need
+to use this command instead: <code>huggingface-cli login</code></p>
+<p>3️⃣ We’re now ready to push our trained agent to the 🤗 Hub 🔥 using
+<code>package_to_hub()</code> function</p>
+<div class="sourceCode" id="cb17"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>package_to_hub(</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>    model<span class="op">=</span>model,</span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>    model_name<span class="op">=</span><span class="ss">f&quot;a2c-</span><span class="sc">{</span>env_id<span class="sc">}</span><span class="ss">&quot;</span>,</span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>    model_architecture<span class="op">=</span><span class="st">&quot;A2C&quot;</span>,</span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>    env_id<span class="op">=</span>env_id,</span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>    eval_env<span class="op">=</span>eval_env,</span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>    repo_id<span class="op">=</span><span class="ss">f&quot;ThomasSimonini/a2c-</span><span class="sc">{</span>env_id<span class="sc">}</span><span class="ss">&quot;</span>,  <span class="co"># Change the username</span></span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>    commit_message<span class="op">=</span><span class="st">&quot;Initial commit&quot;</span>,</span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div>
+<h2 id="take-a-coffee-break">Take a coffee break ☕</h2>
+<ul>
+<li>You already trained your first robot that learned to move
+congratutlations 🥳!</li>
+<li>It’s <strong>time to take a break</strong>. Don’t hesitate to
+<strong>save this notebook</strong>
+<code>File &gt; Save a copy to Drive</code> to work on this second part
+later.</li>
+</ul>
+<h2 id="environment-2-pandareachdense-v2">Environment 2:
+PandaReachDense-v2 🦾</h2>
+<p>The agent we’re going to train is a robotic arm that needs to do
+controls (moving the arm and using the end-effector).</p>
+<p>In robotics, the <em>end-effector</em> is the device at the end of a
+robotic arm designed to interact with the environment.</p>
+<p>In <code>PandaReach</code>, the robot must place its end-effector at
+a target position (green ball).</p>
+<p>We’re going to use the dense version of this environment. This means
+we’ll get a <em>dense reward function</em> that <strong>will provide a
+reward at each timestep</strong> (the closer the agent is to completing
+the task, the higher the reward). This is in contrast to a <em>sparse
+reward function</em> where the environment <strong>return a reward if
+and only if the task is completed</strong>.</p>
+<p>Also, we’re going to use the <em>End-effector displacement
+control</em>, which means the <strong>action corresponds to the
+displacement of the end-effector</strong>. We don’t control the
+individual motion of each joint (joint control).</p>
+<figure>
+<img src="./images/robotics.jpg" alt="xxx" />
+<figcaption aria-hidden="true">xxx</figcaption>
+</figure>
+<p>This way <strong>the training will be easier</strong>.</p>
+<p>In <code>PandaReachDense-v2</code>, the robotic arm must place its
+end-effector at a target position (green ball).</p>
+<div class="sourceCode" id="cb18"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> gym</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>env_id <span class="op">=</span> <span class="st">&quot;PandaReachDense-v2&quot;</span></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Create the env</span></span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>env <span class="op">=</span> gym.make(env_id)</span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a><span class="co"># Get the state space and action space</span></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>s_size <span class="op">=</span> env.observation_space.shape</span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a>a_size <span class="op">=</span> env.action_space</span></code></pre></div>
+<div class="sourceCode" id="cb19"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;_____OBSERVATION SPACE_____ </span><span class="ch">\n</span><span class="st">&quot;</span>)</span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;The State Space is: &quot;</span>, s_size)</span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;Sample observation&quot;</span>, env.observation_space.sample())  <span class="co"># Get a random observation</span></span></code></pre></div>
+<p>The observation space <strong>is a dictionary with 3 different
+elements</strong>: - <code>achieved_goal</code>: (x,y,z) position of the
+goal. - <code>desired_goal</code>: (x,y,z) distance between the goal
+position and the current object position. - <code>observation</code>:
+position (x,y,z) and velocity of the end-effector (vx, vy, vz).</p>
+<p>Given it’s a dictionary as observation, <strong>we will need to use a
+MultiInputPolicy policy instead of MlpPolicy</strong>.</p>
+<div class="sourceCode" id="cb20"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;</span><span class="ch">\n</span><span class="st"> _____ACTION SPACE_____ </span><span class="ch">\n</span><span class="st">&quot;</span>)</span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;The Action Space is: &quot;</span>, a_size)</span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;Action Space Sample&quot;</span>, env.action_space.sample())  <span class="co"># Take a random action</span></span></code></pre></div>
+<p>The action space is a vector with 3 values: - Control x, y, z
+movement</p>
+<p>Now it’s your turn:</p>
+<ol type="1">
+<li>Define the environment called “PandaReachDense-v2”.</li>
+<li>Make a vectorized environment.</li>
+<li>Add a wrapper to normalize the observations and rewards. <a
+href="https://stable-baselines3.readthedocs.io/en/master/guide/vec_envs.html#vecnormalize">Check
+the documentation</a></li>
+<li>Create the A2C Model (don’t forget verbose=1 to print the training
+logs).</li>
+<li>Train it for 1M Timesteps.</li>
+<li>Save the model and VecNormalize statistics when saving the
+agent.</li>
+<li>Evaluate your agent.</li>
+<li>Publish your trained model on the Hub 🔥 with
+<code>package_to_hub</code>.</li>
+</ol>
+<h3 id="solution-fill-the-todo">Solution (fill the todo)</h3>
+<div class="sourceCode" id="cb21"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 1 - 2</span></span>
+<span id="cb21-2"><a href="#cb21-2" aria-hidden="true" tabindex="-1"></a>env_id <span class="op">=</span> <span class="st">&quot;PandaReachDense-v2&quot;</span></span>
+<span id="cb21-3"><a href="#cb21-3" aria-hidden="true" tabindex="-1"></a>env <span class="op">=</span> make_vec_env(env_id, n_envs<span class="op">=</span><span class="dv">4</span>)</span>
+<span id="cb21-4"><a href="#cb21-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-5"><a href="#cb21-5" aria-hidden="true" tabindex="-1"></a><span class="co"># 3</span></span>
+<span id="cb21-6"><a href="#cb21-6" aria-hidden="true" tabindex="-1"></a>env <span class="op">=</span> VecNormalize(env, norm_obs<span class="op">=</span><span class="va">True</span>, norm_reward<span class="op">=</span><span class="va">False</span>, clip_obs<span class="op">=</span><span class="fl">10.0</span>)</span>
+<span id="cb21-7"><a href="#cb21-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb21-8"><a href="#cb21-8" aria-hidden="true" tabindex="-1"></a><span class="co"># 4</span></span>
+<span id="cb21-9"><a href="#cb21-9" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> A2C(policy<span class="op">=</span><span class="st">&quot;MultiInputPolicy&quot;</span>, env<span class="op">=</span>env, verbose<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb21-10"><a href="#cb21-10" aria-hidden="true" tabindex="-1"></a><span class="co"># 5</span></span>
+<span id="cb21-11"><a href="#cb21-11" aria-hidden="true" tabindex="-1"></a>model.learn(<span class="dv">1_000_000</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb22"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 6</span></span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a>model_name <span class="op">=</span> <span class="st">&quot;a2c-PandaReachDense-v2&quot;</span></span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a>model.save(model_name)</span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a>env.save(<span class="st">&quot;vec_normalize.pkl&quot;</span>)</span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a><span class="co"># 7</span></span>
+<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> stable_baselines3.common.vec_env <span class="im">import</span> DummyVecEnv, VecNormalize</span>
+<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-9"><a href="#cb22-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Load the saved statistics</span></span>
+<span id="cb22-10"><a href="#cb22-10" aria-hidden="true" tabindex="-1"></a>eval_env <span class="op">=</span> DummyVecEnv([<span class="kw">lambda</span>: gym.make(<span class="st">&quot;PandaReachDense-v2&quot;</span>)])</span>
+<span id="cb22-11"><a href="#cb22-11" aria-hidden="true" tabindex="-1"></a>eval_env <span class="op">=</span> VecNormalize.load(<span class="st">&quot;vec_normalize.pkl&quot;</span>, eval_env)</span>
+<span id="cb22-12"><a href="#cb22-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-13"><a href="#cb22-13" aria-hidden="true" tabindex="-1"></a><span class="co">#  do not update them at test time</span></span>
+<span id="cb22-14"><a href="#cb22-14" aria-hidden="true" tabindex="-1"></a>eval_env.training <span class="op">=</span> <span class="va">False</span></span>
+<span id="cb22-15"><a href="#cb22-15" aria-hidden="true" tabindex="-1"></a><span class="co"># reward normalization is not needed at test time</span></span>
+<span id="cb22-16"><a href="#cb22-16" aria-hidden="true" tabindex="-1"></a>eval_env.norm_reward <span class="op">=</span> <span class="va">False</span></span>
+<span id="cb22-17"><a href="#cb22-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-18"><a href="#cb22-18" aria-hidden="true" tabindex="-1"></a><span class="co"># Load the agent</span></span>
+<span id="cb22-19"><a href="#cb22-19" aria-hidden="true" tabindex="-1"></a>model <span class="op">=</span> A2C.load(model_name)</span>
+<span id="cb22-20"><a href="#cb22-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-21"><a href="#cb22-21" aria-hidden="true" tabindex="-1"></a>mean_reward, std_reward <span class="op">=</span> evaluate_policy(model, env)</span>
+<span id="cb22-22"><a href="#cb22-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-23"><a href="#cb22-23" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f&quot;Mean reward = </span><span class="sc">{</span>mean_reward<span class="sc">:.2f}</span><span class="ss"> +/- </span><span class="sc">{</span>std_reward<span class="sc">:.2f}</span><span class="ss">&quot;</span>)</span>
+<span id="cb22-24"><a href="#cb22-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-25"><a href="#cb22-25" aria-hidden="true" tabindex="-1"></a><span class="co"># 8</span></span>
+<span id="cb22-26"><a href="#cb22-26" aria-hidden="true" tabindex="-1"></a>package_to_hub(</span>
+<span id="cb22-27"><a href="#cb22-27" aria-hidden="true" tabindex="-1"></a>    model<span class="op">=</span>model,</span>
+<span id="cb22-28"><a href="#cb22-28" aria-hidden="true" tabindex="-1"></a>    model_name<span class="op">=</span><span class="ss">f&quot;a2c-</span><span class="sc">{</span>env_id<span class="sc">}</span><span class="ss">&quot;</span>,</span>
+<span id="cb22-29"><a href="#cb22-29" aria-hidden="true" tabindex="-1"></a>    model_architecture<span class="op">=</span><span class="st">&quot;A2C&quot;</span>,</span>
+<span id="cb22-30"><a href="#cb22-30" aria-hidden="true" tabindex="-1"></a>    env_id<span class="op">=</span>env_id,</span>
+<span id="cb22-31"><a href="#cb22-31" aria-hidden="true" tabindex="-1"></a>    eval_env<span class="op">=</span>eval_env,</span>
+<span id="cb22-32"><a href="#cb22-32" aria-hidden="true" tabindex="-1"></a>    repo_id<span class="op">=</span><span class="ss">f&quot;ThomasSimonini/a2c-</span><span class="sc">{</span>env_id<span class="sc">}</span><span class="ss">&quot;</span>,  <span class="co"># </span><span class="al">TODO</span><span class="co">: Change the username</span></span>
+<span id="cb22-33"><a href="#cb22-33" aria-hidden="true" tabindex="-1"></a>    commit_message<span class="op">=</span><span class="st">&quot;Initial commit&quot;</span>,</span>
+<span id="cb22-34"><a href="#cb22-34" aria-hidden="true" tabindex="-1"></a>)</span></code></pre></div>
+<h2 id="some-additional-challenges">Some additional challenges 🏆</h2>
+<p>The best way to learn <strong>is to try things on your own</strong>!
+Why not try <code>HalfCheetahBulletEnv-v0</code> for PyBullet and
+<code>PandaPickAndPlace-v1</code> for Panda-Gym?</p>
+<p>If you want to try more advanced tasks for panda-gym, you need to
+check what was done using <strong>TQC or SAC</strong> (a more
+sample-efficient algorithm suited for robotics tasks). In real robotics,
+you’ll use a more sample-efficient algorithm for a simple reason:
+contrary to a simulation <strong>if you move your robotic arm too much,
+you have a risk of breaking it</strong>.</p>
+<p>PandaPickAndPlace-v1:
+https://huggingface.co/sb3/tqc-PandaPickAndPlace-v1</p>
+<p>And don’t hesitate to check panda-gym documentation here:
+https://panda-gym.readthedocs.io/en/latest/usage/train_with_sb3.html</p>
+<p>Here are some ideas to go further: * Train more steps * Try different
+hyperparameters by looking at what your classmates have done 👉
+https://huggingface.co/models?other=https://huggingface.co/models?other=AntBulletEnv-v0
+* <strong>Push your new trained model</strong> on the Hub 🔥</p>
+<p>See you on Unit 7! 🔥 ## Keep learning, stay awesome 🤗</p>

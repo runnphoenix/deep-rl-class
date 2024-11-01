@@ -1,0 +1,114 @@
+<h1 id="advantage-actor-critic-a2c-advantage-actor-critic">Advantage
+Actor-Critic (A2C) [[advantage-actor-critic]]</h1>
+<h2 id="reducing-variance-with-actor-critic-methods">Reducing variance
+with Actor-Critic methods</h2>
+<p>The solution to reducing the variance of the Reinforce algorithm and
+training our agent faster and better is to use a combination of
+Policy-Based and Value-Based methods: <em>the Actor-Critic
+method</em>.</p>
+<p>To understand the Actor-Critic, imagine you’re playing a video game.
+You can play with a friend that will provide you with some feedback.
+You’re the Actor and your friend is the Critic.</p>
+<figure>
+<img src="./images/ac.jpg" alt="xxx" />
+<figcaption aria-hidden="true">xxx</figcaption>
+</figure>
+<p>You don’t know how to play at the beginning, <strong>so you try some
+actions randomly</strong>. The Critic observes your action and
+<strong>provides feedback</strong>.</p>
+<p>Learning from this feedback, <strong>you’ll update your policy and be
+better at playing that game.</strong></p>
+<p>On the other hand, your friend (Critic) will also update their way to
+provide feedback so it can be better next time.</p>
+<p>This is the idea behind Actor-Critic. We learn two function
+approximations:</p>
+<ul>
+<li><p><em>A policy</em> that <strong>controls how our agent
+acts</strong>: \( _{}(s) \)</p></li>
+<li><p><em>A value function</em> to assist the policy update by
+measuring how good the action taken is: \( _{w}(s,a) \)</p></li>
+</ul>
+<h2 id="the-actor-critic-process">The Actor-Critic Process</h2>
+<p>Now that we have seen the Actor Critic’s big picture, let’s dive
+deeper to understand how the Actor and Critic improve together during
+the training.</p>
+<p>As we saw, with Actor-Critic methods, there are two function
+approximations (two neural networks): - <em>Actor</em>, a <strong>policy
+function</strong> parameterized by theta: \( <em>{}(s) \) -
+<em>Critic</em>, a <strong>value function</strong> parameterized by w:
+\( </em>{w}(s,a) \)</p>
+<p>Let’s see the training process to understand how the Actor and Critic
+are optimized: - At each timestep, t, we get the current state \( S_t\)
+from the environment and <strong>pass it as input through our Actor and
+Critic</strong>.</p>
+<ul>
+<li>Our Policy takes the state and <strong>outputs an action</strong> \(
+A_t \).</li>
+</ul>
+<figure>
+<img src="./images/step1.jpg" alt="xxx" />
+<figcaption aria-hidden="true">xxx</figcaption>
+</figure>
+<ul>
+<li>The Critic takes that action also as input and, using \( S_t\) and
+\( A_t \), <strong>computes the value of taking that action at that
+state: the Q-value</strong>.</li>
+</ul>
+<figure>
+<img src="./images/step2.jpg" alt="xxx" />
+<figcaption aria-hidden="true">xxx</figcaption>
+</figure>
+<ul>
+<li>The action \( A_t\) performed in the environment outputs a new state
+\( S_{t+1}\) and a reward \( R_{t+1} \) .</li>
+</ul>
+<figure>
+<img src="./images/step3.jpg" alt="xxx" />
+<figcaption aria-hidden="true">xxx</figcaption>
+</figure>
+<ul>
+<li>The Actor updates its policy parameters using the Q value.</li>
+</ul>
+<figure>
+<img src="./images/step4.jpg" alt="xxx" />
+<figcaption aria-hidden="true">xxx</figcaption>
+</figure>
+<ul>
+<li><p>Thanks to its updated parameters, the Actor produces the next
+action to take at \( A_{t+1} \) given the new state \( S_{t+1}
+\).</p></li>
+<li><p>The Critic then updates its value parameters.</p></li>
+</ul>
+<figure>
+<img src="./images/step5.jpg" alt="xxx" />
+<figcaption aria-hidden="true">xxx</figcaption>
+</figure>
+<h2 id="adding-advantage-in-actor-critic-a2c">Adding Advantage in
+Actor-Critic (A2C)</h2>
+<p>We can stabilize learning further by <strong>using the Advantage
+function as Critic instead of the Action value function</strong>.</p>
+<p>The idea is that the Advantage function calculates the relative
+advantage of an action compared to the others possible at a state:
+<strong>how taking that action at a state is better compared to the
+average value of the state</strong>. It’s subtracting the mean value of
+the state from the state action pair:</p>
+<figure>
+<img src="./images/advantage1.jpg" alt="xxx" />
+<figcaption aria-hidden="true">xxx</figcaption>
+</figure>
+<p>In other words, this function calculates <strong>the extra reward we
+get if we take this action at that state compared to the mean reward we
+get at that state</strong>.</p>
+<p>The extra reward is what’s beyond the expected value of that state. -
+If A(s,a) &gt; 0: our gradient is <strong>pushed in that
+direction</strong>. - If A(s,a) &lt; 0 (our action does worse than the
+average value of that state), <strong>our gradient is pushed in the
+opposite direction</strong>.</p>
+<p>The problem with implementing this advantage function is that it
+requires two value functions — \( Q(s,a)\) and \( V(s)\). Fortunately,
+<strong>we can use the TD error as a good estimator of the advantage
+function.</strong></p>
+<figure>
+<img src="./images/advantage2.jpg" alt="xxx" />
+<figcaption aria-hidden="true">xxx</figcaption>
+</figure>

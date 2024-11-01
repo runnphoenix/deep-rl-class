@@ -10,10 +10,10 @@ from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.monitor import Monitor
 from pyvirtualdisplay import Display
 
-virtual_display = Display(visible=1, size=(1400, 900))
-virtual_display.start()
-
 env_id = "PandaReachDense-v3"
+#env_id = "PandaPickAndPlace-v3"
+model_file = 'panda-result'
+env_file = 'vec_normalize.pkl'
 
 # Create the env
 env = gym.make(env_id)
@@ -37,18 +37,17 @@ env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=10.)
 model = A2C(policy = "MultiInputPolicy",
             env = env,
             verbose=1)
+
 '''
 model.learn(1_000_000)
-
-# Save the model and  VecNormalize statistics when saving the agent
-model.save("a2c-PandaReachDense-v3")
-env.save("vec_normalize.pkl")
-
+# Save the model and VecNormalize statistics when saving the agent
+model.save(model_file)
+env.save(env_file)
 '''
 
 # Load the saved statistics
-eval_env = DummyVecEnv([lambda: gym.make("PandaReachDense-v3")])
-eval_env = VecNormalize.load("vec_normalize.pkl", eval_env)
+eval_env = DummyVecEnv([lambda: gym.make(env_id)])
+eval_env = VecNormalize.load(env_file, eval_env)
 
 # We need to override the render_mode
 eval_env.render_mode = "rgb_array"
@@ -59,11 +58,14 @@ eval_env.training = False
 eval_env.norm_reward = False
 
 # Load the agent
-model = A2C.load("a2c-PandaReachDense-v3")
+model = A2C.load(model_file)
 mean_reward, std_reward = evaluate_policy(model, eval_env)
 print(f"Mean reward = {mean_reward:.2f} +/- {std_reward:.2f}")
 
 # Show
+virtual_display = Display(visible=1, size=(1400, 900))
+virtual_display.start()
+
 obs = eval_env.reset()
 while True:
     action, _states = model.predict(obs)
