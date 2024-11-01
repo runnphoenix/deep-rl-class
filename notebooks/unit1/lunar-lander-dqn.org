@@ -1,0 +1,57 @@
+#+TITLE: LunarLander-DQN
+#+AUTHOR: Chris Zhang
+
+* First of all, Implement DQN
+** Also, as we plan to use FixedTarget improvement, we should make them 2
+#+begin_src jupyter-python :session dqn :results both :export both
+  import torch.nn as nn
+
+  class DQN(nn.Module):
+      def __init__(self, dims):
+          super().__init__()
+		
+          layers = []
+          for i in range(len(dims)-1):
+              layers.append(nn.Linear(dims[i], dims[i+1]))
+              if i < len(dims) - 2:
+                  layers.append(nn.ReLU())
+          self.net = nn.Sequential(*layers)
+
+      def forward(self, x):
+          return self.net(x)
+
+#+end_src
+
+#+RESULTS:
+
+** Test the implement of DQN
+#+begin_src jupyter-python :session dqn :results both
+  dqn = DQN([8, 32, 4])
+  target_dqn = DQN([8, 32, 4])
+  print(dqn.net)
+#+end_src
+
+#+RESULTS:
+: Sequential(
+:   (0): Linear(in_features=8, out_features=32, bias=True)
+:   (1): ReLU()
+:   (2): Linear(in_features=32, out_features=4, bias=True)
+: )
+
+* Then, Implement Memory
+Memory is used to store (s,a,r,s',done) info for further usage
+#+begin_src jupyter-python :session dqn :results both
+  class Memory():
+          def __init__(self, state_len, act_len, batch_size, capacity):
+                  pass
+
+          def length(self):
+                  return len(self.states)
+	
+          def push(self, state, act, reward, new_state, done):
+                  pass
+
+          def sample(self, batch_size):
+                  pass
+
+#+end_src
