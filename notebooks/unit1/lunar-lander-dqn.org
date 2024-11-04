@@ -25,7 +25,7 @@
 #+RESULTS:
 
 ** Test the implement of DQN
-#+begin_src jupyter-python :session dqn :results both
+#+begin_src jupyter-python :session dqn :results both :exports both
   dqn = DQN([8, 32, 4])
   target_dqn = DQN([8, 32, 4])
   print(dqn.net)
@@ -40,18 +40,155 @@
 
 * Then, Implement Memory
 Memory is used to store (s,a,r,s',done) info for further usage
-#+begin_src jupyter-python :session dqn :results both
+#+begin_src jupyter-python :session dqn :results both :exports both
+  import numpy as np
+
   class Memory():
-          def __init__(self, state_len, act_len, batch_size, capacity):
-                  pass
+      def __init__(self, state_len, act_len, batch_size, capacity):
+          self.states     = np.zeros([capacity, state_len], dtype=np.float32)
+          self.actions    = np.zeros([capacity, act_len], dtype=np.float32)
+          self.rewards    = np.zeros([capacity], dtype=np.float32)
+          self.new_states = np.zeros([capacity, state_len], dtype=np.float32)
+          self.done       = np.zeros([capacity], dtype=int)
 
-          def length(self):
-                  return len(self.states)
-	
-          def push(self, state, act, reward, new_state, done):
-                  pass
+          self.batch_size = batch_size
+          self.capacity = capacity
+          self.ptr, self.size = 0, 0
 
-          def sample(self, batch_size):
-                  pass
+      def length(self):
+          return self.size
 
+      def push(self, state, act, reward, new_state, done):
+          self.states[self.ptr]     = state
+          self.actions[self.ptr]    = act
+          self.rewards[self.ptr]    = reward
+          self.new_states[self.ptr] = new_state
+          self.done[self.ptr]       = done
+
+          self.ptr  = (self.ptr + 1) % self.capacity
+          self.size = min(self.size + 1, self.capacity)
+
+      def sample(self):
+          idx = np.random.choice(self.capacity, size=self.batch_size, replace=False)
+          return dict(states     = self.states[idx],
+                      actions    = self.actions[idx],
+                      rewards    = self.rewards[idx],
+                      new_states = self.new_states[idx],
+                      done       = self.done[idx])
+
+#+end_src
+
+#+RESULTS:
+
+** Test the implementation of Memory
+#+begin_src jupyter-python :session dqn :results both :exports both
+  memory = Memory(8,4,3,5)
+  for i in range(10):
+      print(memory.length(), memory.ptr)
+      memory.push(np.repeat(i, 8), np.repeat(i+1, 4), i*0.5, np.repeat(i, 8), i%2)
+
+  sample_dic = memory.sample()
+  for i, (k, v) in enumerate(sample_dic.items()):
+      print("key and values: {}\n{}".format(k, v))
+#+end_src
+
+#+RESULTS:
+#+begin_example
+  0 0
+  1 1
+  2 2
+  3 3
+  4 4
+  5 0
+  5 1
+  5 2
+  5 3
+  5 4
+  key and values: states
+  [[5. 5. 5. 5. 5. 5. 5. 5.]
+   [7. 7. 7. 7. 7. 7. 7. 7.]
+   [6. 6. 6. 6. 6. 6. 6. 6.]]
+  key and values: actions
+  [[6. 6. 6. 6.]
+   [8. 8. 8. 8.]
+   [7. 7. 7. 7.]]
+  key and values: rewards
+  [2.5 3.5 3. ]
+  key and values: new_states
+  [[5. 5. 5. 5. 5. 5. 5. 5.]
+   [7. 7. 7. 7. 7. 7. 7. 7.]
+   [6. 6. 6. 6. 6. 6. 6. 6.]]
+  key and values: done
+  [1 1 0]
+#+end_example
+
+
+* The training process
+- Reset the environment
+- Choose an action
+- Take the action and receive r,s',d from environment
+- Store(s,a,r,s',d)
+- If there are enough elements in memory
+  - Sample a batch from memory
+  - Compute Loss
+  - BackPropagation
+  - if tao times:
+    - transfer weights of networks
+
+** Import libraries
+#+begin_src jupyter-python :session dqn :results output :exports both
+  import torch
+  device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+  print(device)
+
+  import torch.nn.Functional as F
+#+end_src
+
+#+RESULTS:
+: cuda:0
+
+** Select an action
+#+begin_src jupyter-python :session dqn :results output :exports both
+  def select_action(epsilon, state, q_net, env, training):
+      if np.random.random() < epsilon and training:
+          action = env.action_space.sample()
+      else:
+          action = q_net(torch.FloatTensor(state).to(device)).argmax().item().cpu()
+
+      return action
+#+end_src
+
+#+RESULTS:
+
+** take a step
+#+begin_src jupyter-python :session dqn :results none :exports both
+  def step(env, state, action, memory, training):
+      new_state, reward, done, _ = env.step(action)
+
+      if training:
+          memory.push(state, action, reward, new_state, done)
+
+      return new_state, reward, done
+#+end_src
+
+** Calculate Loss
+#+begin_src jupyter-python :session dqn :results output :exports both
+  def calculate_loss(q_net, samples, gamma):
+      states =  torch.FloatTensor(samples['state']).to(device)
+      actions =  torch.FloatTensor(samples['action']).to(device)
+      rewards =  torch.FloatTensor(samples['reward']).to(device)
+      new_states =  torch.FloatTensor(samples['new_state']).to(device)
+      dones =  torch.FloatTensor(samples['done']).to(device)
+
+      current_q = q_net(states).gather(1, actions)
+      target_q = q_net(new_states).max(dim=1, keepdim=True)[0].detach()
+
+      mask = 1 - dones
+      target = (rewards + gamma * target_q * mask).to(device)
+
+      return F.smooth_F1_loss(current_q, target)
+#+end_src
+
+** Train
+#+begin_src jupyter-python :session dqn :results output :exports both
 #+end_src
