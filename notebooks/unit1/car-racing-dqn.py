@@ -13,13 +13,11 @@ import matplotlib.pyplot as plt
 import time
 import csv
 
-env = gym.make("LunarLander-v2")
-#env = gym.make("CarRacing-v2")
+env = gym.make("CarRacing-v2", continuous=False)
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # Hyper Parameters
-state_len = 24
-action_len = 4
+action_len = 5
 
 Tau = 4
 BatchSize = 128
@@ -27,30 +25,35 @@ MemoryCapacity = BatchSize * 20
 LearningRate = 3e-4
 NumEpisodes = 2000
 MaxEpisodeSteps = 1000
-EvalSteps = NumEpisodes // 20
+EvalSteps = NumEpisodes // 200
 Epsilon = 1
 Gamma = 0.99
 
 class DQN(nn.Module):
-    def __init__(self, dims):
+    def __init__(self):
         super().__init__()
+        
+        self.conv1 = nn.Conv2d(3, 16, 7, stride=3)
+        self.conv2 = nn.Conv2d(16, 32, 5, stride=2)
+        self.fc1 = nn.Linear(5408, 256)
+        self.fc2 = nn.Linear(256, action_len)
   	
-        layers = []
-        for i in range(len(dims)-1):
-            layers.append(nn.Linear(dims[i], dims[i+1]))
-            if i < len(dims) - 2:
-                layers.append(nn.ReLU())
-        self.net = nn.Sequential(*layers)
 
     def forward(self, x):
-        return self.net(x)
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x)) # 128,342,13,13
+        x = x.view((x.shape[0], -1))
+        x = F.relu(self.fc1(x))
+        x = self.fc2(x)
+        #print(x.shape)
+        return x
 
 class Memory():
-    def __init__(self, state_len, action_len, batch_size, capacity):
-        self.states     = np.zeros([capacity, state_len], dtype=np.float32)
-        self.actions    = np.zeros([capacity, action_len], dtype=np.float32)
+    def __init__(self, batch_size, capacity):
+        self.states     = np.zeros([capacity, 96,96,3], dtype=np.float32)
+        self.actions    = np.zeros([capacity], dtype=int)
         self.rewards    = np.zeros([capacity], dtype=np.float32)
-        self.new_states = np.zeros([capacity, state_len], dtype=np.float32)
+        self.new_states = np.zeros([capacity, 96,96,3], dtype=np.float32)
         self.done       = np.zeros([capacity], dtype=int)
 
         self.batch_size = batch_size
@@ -84,7 +87,7 @@ def select_action(epsilon, state, q_net, env, training):
         action = env.action_space.sample()
     else:
         with torch.no_grad():
-            action = q_net(torch.FloatTensor(state).to(device)).argmax().cpu().item()
+            action = q_net(torch.FloatTensor(state).reshape(1,3,96,96).to(device)).argmax().cpu().item()
 
     return action
 
@@ -97,10 +100,10 @@ def step(env, state, action, memory, training):
     return new_state, reward, done
 
 def calculate_loss(q_net, target_q_net, samples, gamma):
-    states =  torch.FloatTensor(samples['states']).to(device)
+    states =  torch.FloatTensor(samples['states']).reshape(-1,3,96,96).to(device)
     actions =  torch.LongTensor(samples['actions']).reshape(-1,1).to(device)
     rewards =  torch.FloatTensor(samples['rewards']).reshape(-1,1).to(device)
-    new_states =  torch.FloatTensor(samples['new_states']).to(device)
+    new_states =  torch.FloatTensor(samples['new_states']).reshape(-1,3,96,96).to(device)
     dones =  torch.LongTensor(samples['done']).reshape(-1,1).to(device)
 
     current_q = q_net(states).gather(1, actions)
@@ -139,9 +142,9 @@ def record_episode(model, episode_idx):
     env.close()
 
 # Create memory and Q-Net
-memory = Memory(state_shape, action_shape, BatchSize, MemoryCapacity)
-dqn = DQN([8,64,64,32,4]).to(device)
-target_dqn = DQN([8,64,64,32,4]).to(device)
+memory = Memory(BatchSize, MemoryCapacity)
+dqn = DQN().to(device)
+target_dqn = DQN().to(device)
 
 # Training Process
 optimizer = optim.Adam(dqn.parameters(), lr=LearningRate)
