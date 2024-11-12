@@ -3,7 +3,7 @@
 
 * First of all, Implement DQN
 ** Also, as we plan to use FixedTarget improvement, we should make them 2
-#+begin_src jupyter-python :session dqn :results both :export both
+#+begin_src jupyter-python :session dqn :results none :export both
   import torch.nn as nn
 
   class DQN(nn.Module):
@@ -26,8 +26,8 @@
 
 ** Test the implement of DQN
 #+begin_src jupyter-python :session dqn :results both :exports both
-  dqn = DQN([8, 32, 4])
-  target_dqn = DQN([8, 32, 4])
+  dqn = DQN([8, 32, 32, 4])
+  target_dqn = DQN([8, 32, 32, 4])
   print(dqn.net)
 #+end_src
 
@@ -35,7 +35,9 @@
 : Sequential(
 :   (0): Linear(in_features=8, out_features=32, bias=True)
 :   (1): ReLU()
-:   (2): Linear(in_features=32, out_features=4, bias=True)
+:   (2): Linear(in_features=32, out_features=32, bias=True)
+:   (3): ReLU()
+:   (4): Linear(in_features=32, out_features=4, bias=True)
 : )
 
 * Then, Implement Memory
@@ -46,7 +48,7 @@ Memory is used to store (s,a,r,s',done) info for further usage
   class Memory():
       def __init__(self, state_len, act_len, batch_size, capacity):
           self.states     = np.zeros([capacity, state_len], dtype=np.float32)
-          self.actions    = np.zeros([capacity, act_len], dtype=np.float32)
+          self.actions    = np.zeros([capacity], dtype=int)
           self.rewards    = np.zeros([capacity], dtype=np.float32)
           self.new_states = np.zeros([capacity, state_len], dtype=np.float32)
           self.done       = np.zeros([capacity], dtype=int)
@@ -85,7 +87,7 @@ Memory is used to store (s,a,r,s',done) info for further usage
   memory = Memory(8,4,3,5)
   for i in range(10):
       print(memory.length(), memory.ptr)
-      memory.push(np.repeat(i, 8), np.repeat(i+1, 4), i*0.5, np.repeat(i, 8), i%2)
+      memory.push(np.repeat(i, 8), i+1, i*0.5, np.repeat(i, 8), i%2)
 
   sample_dic = memory.sample()
   for i, (k, v) in enumerate(sample_dic.items()):
@@ -109,9 +111,7 @@ Memory is used to store (s,a,r,s',done) info for further usage
    [7. 7. 7. 7. 7. 7. 7. 7.]
    [6. 6. 6. 6. 6. 6. 6. 6.]]
   key and values: actions
-  [[6. 6. 6. 6.]
-   [8. 8. 8. 8.]
-   [7. 7. 7. 7.]]
+  [6 8 7]
   key and values: rewards
   [2.5 3.5 3. ]
   key and values: new_states
@@ -135,25 +135,13 @@ Memory is used to store (s,a,r,s',done) info for further usage
   - if tao times:
     - transfer weights of networks
 
-** Import libraries
-#+begin_src jupyter-python :session dqn :results output :exports both
-  import torch
-  device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-  print(device)
-
-  import torch.nn.Functional as F
-#+end_src
-
-#+RESULTS:
-: cuda:0
-
 ** Select an action
 #+begin_src jupyter-python :session dqn :results output :exports both
   def select_action(epsilon, state, q_net, env, training):
       if np.random.random() < epsilon and training:
           action = env.action_space.sample()
       else:
-          action = q_net(torch.FloatTensor(state).to(device)).argmax().item().cpu()
+          action = q_net(torch.FloatTensor(state).to(device)).argmax().cpu().item()
 
       return action
 #+end_src
@@ -163,7 +151,7 @@ Memory is used to store (s,a,r,s',done) info for further usage
 ** take a step
 #+begin_src jupyter-python :session dqn :results none :exports both
   def step(env, state, action, memory, training):
-      new_state, reward, done, _ = env.step(action)
+      new_state, reward, done, _, info = env.step(action)
 
       if training:
           memory.push(state, action, reward, new_state, done)
@@ -172,13 +160,13 @@ Memory is used to store (s,a,r,s',done) info for further usage
 #+end_src
 
 ** Calculate Loss
-#+begin_src jupyter-python :session dqn :results output :exports both
+#+begin_src jupyter-python :session dqn :results none :exports both
   def calculate_loss(q_net, samples, gamma):
-      states =  torch.FloatTensor(samples['state']).to(device)
-      actions =  torch.FloatTensor(samples['action']).to(device)
-      rewards =  torch.FloatTensor(samples['reward']).to(device)
-      new_states =  torch.FloatTensor(samples['new_state']).to(device)
-      dones =  torch.FloatTensor(samples['done']).to(device)
+      states =  torch.FloatTensor(samples['states']).to(device)
+      actions =  torch.LongTensor(samples['actions']).reshape(-1,1).to(device)
+      rewards =  torch.FloatTensor(samples['rewards']).reshape(-1,1).to(device)
+      new_states =  torch.FloatTensor(samples['new_states']).to(device)
+      dones =  torch.FloatTensor(samples['done']).reshape(-1,1).to(device)
 
       current_q = q_net(states).gather(1, actions)
       target_q = q_net(new_states).max(dim=1, keepdim=True)[0].detach()
@@ -186,9 +174,154 @@ Memory is used to store (s,a,r,s',done) info for further usage
       mask = 1 - dones
       target = (rewards + gamma * target_q * mask).to(device)
 
-      return F.smooth_F1_loss(current_q, target)
+      return F.smooth_l1_loss(current_q, target)
+#+end_src 
+
+** BackPropagation
+#+begin_src jupyter-python :session dqn :results none :exports both
+  def backpropagation(loss, optimizer):
+      optimizer.zero_grad()
+      loss.backward()
+      optimizer.step()
+
 #+end_src
 
 ** Train
 #+begin_src jupyter-python :session dqn :results output :exports both
+  # import game environment
+  import gymnasium as gym
+  env = gym.make("LunarLander-v2")
+
+  # import libraries needed
+  import torch
+  import torch.nn.functional as F
+  import torch.optim as optim
+  device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+  # Hyper Parameters
+  Tau = 4
+  MemoryCapacity = 1000
+  BatchSize = 32
+  LearningRate = 1e-4
+  TrainingSteps = 100
+  Epsilon = 1
+  Gamma = 0.99
+
+  # Create memory and Q-Net
+  memory = Memory(8,4,BatchSize,MemoryCapacity)
+  dqn = DQN([8,64,64,4]).to(device)
+  target_dqn = DQN([8,64,64,4]).to(device)
+
+  # Training Process
+  optimizer = optim.Adam(dqn.parameters())
+  state, info = env.reset()
+
+  # collect losses
+  losses = []
+
+  for i in range(TrainingSteps):
+      # select an action
+      action = select_action(Epsilon, state, dqn, env, training=True)
+
+      # receive env update
+      # push to memory
+      new_state, reward, done = step(env, state, action, memory, training=True)
+
+      # decrease Epsilon
+      Epsilon = 1 - (i / TrainingSteps)
+
+      # if episode done, start over
+      if done:
+          state, info = env.reset()
+
+      # train if there are enough memories
+      if memory.length() > BatchSize:
+          # sample a batch
+          train_samples = memory.sample()
+
+          # calculate loss
+          loss = calculate_loss(dqn, train_samples, Gamma)
+          print(loss)
+          if i % 1000 == 0:
+              print("loss is: {}".format(loss))
+          losses.append(loss)
+
+          # backpropagation
+          backpropagation(loss, optimizer)
+
+  # print loss
+  print(losses)
 #+end_src
+
+#+RESULTS:
+#+begin_example
+  tensor(0.0026, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0012, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0393, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0545, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0461, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0549, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0811, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.1455, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0422, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0606, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0502, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0858, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0416, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0305, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0752, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0184, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0732, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0547, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0811, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0265, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0007, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.1257, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.1235, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.1313, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.1404, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.1437, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.1579, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0822, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0008, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0838, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0095, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0345, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0174, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.1797, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0996, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0798, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0132, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0328, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.1592, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0257, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.1554, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0009, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.2319, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.1595, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.1192, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0414, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0895, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.1388, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0139, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0060, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.1195, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0004, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0401, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0528, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.2088, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0698, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.1529, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.1891, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0031, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0013, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0375, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.4394, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.3258, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.2620, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0738, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.1252, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0676, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  tensor(0.0468, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)
+  [tensor(0.0026, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0012, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0393, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0545, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0461, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0549, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0811, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.1455, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0422, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0606, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0502, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0858, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0416, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0305, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0752, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0184, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0732, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0547, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0811, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0265, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0007, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.1257, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.1235, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.1313, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.1404, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.1437, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.1579, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0822, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0008, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0838, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0095, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0345, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0174, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.1797, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0996, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0798, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0132, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0328, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.1592, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0257, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.1554, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0009, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.2319, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.1595, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.1192, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0414, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0895, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.1388, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0139, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0060, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.1195, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0004, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0401, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0528, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.2088, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0698, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.1529, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.1891, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0031, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0013, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0375, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.4394, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.3258, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.2620, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0738, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.1252, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0676, device='cuda:0', grad_fn=<SmoothL1LossBackward0>), tensor(0.0468, device='cuda:0', grad_fn=<SmoothL1LossBackward0>)]
+#+end_example
