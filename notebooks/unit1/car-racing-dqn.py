@@ -23,9 +23,9 @@ Tau = 4
 BatchSize = 128
 MemoryCapacity = BatchSize * 50
 LearningRate = 1e-5
-NumEpisodes = 2000
-MaxEpisodeSteps = 500
-EvalSteps = NumEpisodes // 100
+NumEpisodes = 500
+MaxEpisodeSteps = 1500
+EvalSteps = NumEpisodes // 50
 Epsilon = 1
 EpsilonMin = 0.1
 Gamma = 0.99
@@ -34,18 +34,15 @@ class DQN(nn.Module):
     def __init__(self):
         super().__init__()
         
-        self.conv1 = nn.Conv2d(3, 8, 5, stride=1)
-        self.conv2 = nn.Conv2d(8, 16, 3, stride=1)
-        self.pool = nn.MaxPool2d(2,2)
+        self.conv1 = nn.Conv2d(3, 8, 5, stride=2)
+        self.conv2 = nn.Conv2d(8, 16, 3, stride=2)
         self.fc1 = nn.Linear(7744, 256)
         self.fc2 = nn.Linear(256, action_len)
   	
 
     def forward(self, x):
         x = F.relu(self.conv1(x))
-        x = self.pool(x)
         x = F.relu(self.conv2(x))
-        x = self.pool(x)
         x = x.view((x.shape[0], -1))
         x = F.relu(self.fc1(x))
         x = self.fc2(x)
@@ -95,7 +92,8 @@ def select_action(epsilon, state, q_net, env, training):
     return action
 
 def step(env, state, action, memory, training):
-    new_state, reward, done, _, info = env.step(action)
+    new_state, reward, done, truncated, info = env.step(action)
+    done = done or truncated
 
     if training:
         memory.push(state, action, reward, new_state, done)
@@ -125,7 +123,7 @@ def backpropagation(loss, optimizer):
     loss.backward()
     optimizer.step()
 
-def record_episode(model, episode_idx):
+def record_episode(model, episode_idx, epsilon):
     num_record_per_episode = 2
 
     env = gym.make("CarRacing-v2", continuous=False, render_mode="rgb_array")
@@ -138,7 +136,7 @@ def record_episode(model, episode_idx):
     
         episode_over = False
         while not episode_over:
-            action = select_action(Epsilon, obs, model, env, training=False)
+            action = select_action(epsilon, obs, model, env, training=False)
             obs, reward, terminated, truncated, info = env.step(action)
     
             episode_over = terminated or truncated
@@ -156,6 +154,7 @@ scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=NumEpisodes)
 # collect scores
 scores = []
 steps  = []
+epsilon = Epsilon
 
 for i in tqdm(range(1, NumEpisodes+1)):
     state, info = env.reset()
@@ -164,7 +163,7 @@ for i in tqdm(range(1, NumEpisodes+1)):
 
     while not epi_step > MaxEpisodeSteps:
         # select an action
-        action = select_action(Epsilon, state, dqn, env, training=True)
+        action = select_action(epsilon, state, dqn, env, training=True)
 
         # receive env update
         # push to memory
@@ -196,15 +195,15 @@ for i in tqdm(range(1, NumEpisodes+1)):
                 print('-' * 80)
                 print("Score of episode {}-{}: {}".format(i-EvalSteps, i, np.mean(scores[-EvalSteps:])))
                 print("Lr of episode {}: {}".format(i, optimizer.param_groups[0]['lr']))
-                print("Epsilon of episode {}: {}".format(i, Epsilon))
+                print("Epsilon of episode {}: {}".format(i, epsilon))
 
-                record_episode(dqn, i)
+                record_episode(dqn, i, epsilon)
             break
 
         epi_step += 1
 
     # decrease Epsilon
-    Epsilon = Epsilon - (Epsilon - EpsilonMin) * (i / NumEpisodes)
+    epsilon = max(Epsilon - (Epsilon - EpsilonMin) * (i / NumEpisodes) * 5, EpsilonMin)
     scheduler.step()
 
 torch.save(dqn.state_dict(), './trained_dqn.pth')
