@@ -2,7 +2,7 @@ import csv
 import matplotlib.pyplot as plt
 
 scores = []
-with open('scores.csv', 'r') as file:
+with open('lunar-pg-scores.csv', 'r') as file:
     reader = csv.reader(file)
     for row in reader:
         scores.append(row)

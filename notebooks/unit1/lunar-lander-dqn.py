@@ -18,7 +18,7 @@ env = gym.make("LunarLander-v2")
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # Hyper Parameters
-state_len = 24
+state_len = 8
 action_len = 4
 
 Tau = 4
@@ -48,7 +48,7 @@ class DQN(nn.Module):
 class Memory():
     def __init__(self, state_len, action_len, batch_size, capacity):
         self.states     = np.zeros([capacity, state_len], dtype=np.float32)
-        self.actions    = np.zeros([capacity, action_len], dtype=np.float32)
+        self.actions    = np.zeros([capacity], dtype=int)
         self.rewards    = np.zeros([capacity], dtype=np.float32)
         self.new_states = np.zeros([capacity, state_len], dtype=np.float32)
         self.done       = np.zeros([capacity], dtype=int)
@@ -123,7 +123,7 @@ def record_episode(model, episode_idx):
     num_record_per_episode = 2
 
     env = gym.make("LunarLander-v2", render_mode="rgb_array")
-    env = RecordVideo(env, video_folder="luna-lander-agent", name_prefix="training-{}".format(episode_idx), 
+    env = RecordVideo(env, video_folder="lunar-lander-agent", name_prefix="training-{}".format(episode_idx), 
                       episode_trigger=lambda x: True)
     env = RecordEpisodeStatistics(env)
     
@@ -139,7 +139,7 @@ def record_episode(model, episode_idx):
     env.close()
 
 # Create memory and Q-Net
-memory = Memory(state_shape, action_shape, BatchSize, MemoryCapacity)
+memory = Memory(state_len, action_len, BatchSize, MemoryCapacity)
 dqn = DQN([8,64,64,32,4]).to(device)
 target_dqn = DQN([8,64,64,32,4]).to(device)
 
@@ -201,8 +201,8 @@ for i in tqdm(range(1, NumEpisodes+1)):
     Epsilon = 1 - (i / NumEpisodes)
     scheduler.step()
 
-torch.save(dqn.state_dict(), './trained_dqn.pth')
+torch.save(dqn.state_dict(), './trained_lunar_dqn.pth')
 
-with open('scores.csv', 'w', newline='') as file:
+with open('scores-lunar-dqn.csv', 'w', newline='') as file:
     writer = csv.writer(file)
     writer.writerow(scores)
