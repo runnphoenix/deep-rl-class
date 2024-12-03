@@ -36,17 +36,26 @@ class DQN(nn.Module):
         
         self.conv1 = nn.Conv2d(3, 8, 5, stride=2)
         self.conv2 = nn.Conv2d(8, 16, 3, stride=2)
-        self.fc1 = nn.Linear(7744, 256)
-        self.fc2 = nn.Linear(256, action_len)
+        self.fc_v1 = nn.Linear(7744, 256)
+        self.fc_v2 = nn.Linear(256, 1)
+        self.fc_a1 = nn.Linear(7744, 256)
+        self.fc_a2 = nn.Linear(256, action_len)
   	
 
     def forward(self, x):
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
         x = x.view((x.shape[0], -1))
-        x = F.relu(self.fc1(x))
-        x = self.fc2(x)
-        return x
+
+        v = F.relu(self.fc_v1(x))
+        v = self.fc_v2(v)
+
+        a = F.relu(self.fc_a1(x))
+        a = self.fc_a2(a)
+
+        q = v + a - a.mean(dim=1, keepdim=True)
+
+        return q
 
 class Memory():
     def __init__(self, batch_size, capacity):
@@ -80,7 +89,6 @@ class Memory():
                     rewards    = self.rewards[idx],
                     new_states = self.new_states[idx],
                     done       = self.done[idx])
-
 
 def select_action(epsilon, state, q_net, env, training):
     if np.random.random() < epsilon and training:
@@ -127,7 +135,7 @@ def record_episode(model, episode_idx, epsilon):
     num_record_per_episode = 2
 
     env = gym.make("CarRacing-v2", continuous=False, render_mode="rgb_array")
-    env = RecordVideo(env, video_folder="car-racing-agent", name_prefix="training-{}".format(episode_idx), 
+    env = RecordVideo(env, video_folder="car-racing-dqn", name_prefix="training-{}".format(episode_idx), 
                       episode_trigger=lambda x: True)
     env = RecordEpisodeStatistics(env)
     
