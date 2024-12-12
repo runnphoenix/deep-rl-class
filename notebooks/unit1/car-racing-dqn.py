@@ -23,9 +23,8 @@ Tau = 4
 BatchSize = 128
 MemoryCapacity = BatchSize * 50
 LearningRate = 1e-5
-NumEpisodes = 500
-MaxEpisodeSteps = 1500
-EvalSteps = NumEpisodes // 50
+NumEpisodes = 300
+EvalSteps = NumEpisodes // 30
 Epsilon = 1
 EpsilonMin = 0.1
 Gamma = 0.99
@@ -169,7 +168,7 @@ for i in tqdm(range(1, NumEpisodes+1)):
     score = 0
     epi_step = 0
 
-    while not epi_step > MaxEpisodeSteps:
+    while True:
         # select an action
         action = select_action(epsilon, state, dqn, env, training=True)
 
@@ -195,7 +194,7 @@ for i in tqdm(range(1, NumEpisodes+1)):
                 target_dqn.load_state_dict(dqn.state_dict())
 
         # if episode done, start over
-        if done or epi_step == MaxEpisodeSteps:
+        if done:
             scores.append(score)
             steps.append(epi_step)
 
@@ -211,7 +210,7 @@ for i in tqdm(range(1, NumEpisodes+1)):
         epi_step += 1
 
     # decrease Epsilon
-    epsilon = max(Epsilon - (Epsilon - EpsilonMin) * (i / NumEpisodes) * 5, EpsilonMin)
+    epsilon = max(Epsilon - (Epsilon - EpsilonMin) * (i / NumEpisodes) * 3, EpsilonMin)
     scheduler.step()
 
 torch.save(dqn.state_dict(), './trained_dqn.pth')
