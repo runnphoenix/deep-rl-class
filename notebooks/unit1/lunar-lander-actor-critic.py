@@ -21,8 +21,9 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 state_len = 8
 action_len = 4
 
-LearningRate = 1e-10
-NumEpisodes = 3000
+LearningRateActor  = 1e-4
+LearningRateCritic = 1e-5
+NumEpisodes = 1000
 NumEval = 10
 Gamma = 0.99
 
@@ -63,9 +64,14 @@ def calculate_loss_actor(model, action, state, reward):
 def calculate_loss_critic(model, state, new_state, reward, done):
     state = torch.FloatTensor(np.array(state)).to(device)
     new_state = torch.FloatTensor(np.array(new_state)).to(device)
-    loss =  0.5 * F.mse_loss(reward + Gamma * model(new_state) * (1-done),  model(state))
 
-    return loss
+    current_v = model(state)
+    new_v = reward + Gamma * model(new_state) * (1-done)
+
+    delta_v = new_v - current_v
+    loss =  F.mse_loss(current_v, new_v)
+
+    return delta_v, loss
 
 def record_episode(actor, episode_idx):
     num_record_per_episode = 1
@@ -94,16 +100,17 @@ def record_episode(actor, episode_idx):
     print("=" * 80)
 
 # Training Process
-actor_optimizer = optim.Adam(actor.parameters(), lr=LearningRate)
+actor_optimizer = optim.Adam(actor.parameters(), lr=LearningRateActor)
 actor_scheduler = optim.lr_scheduler.CosineAnnealingLR(actor_optimizer, T_max=NumEpisodes)
-critic_optimizer = optim.Adam(critic.parameters(), lr=LearningRate)
+critic_optimizer = optim.Adam(critic.parameters(), lr=LearningRateCritic)
 critic_scheduler = optim.lr_scheduler.CosineAnnealingLR(critic_optimizer, T_max=NumEpisodes)
 
 # Record for final evaluation
 episode_scores = []
 episode_steps = []
 
-# Train one batch
+# Train
+#TODO: Decide which modification works: 1. diff lr for actor and critic 2. new value for critic
 for i in tqdm(range(NumEpisodes)):
     state, info = env.reset()
     epi_score = 0
@@ -119,14 +126,14 @@ for i in tqdm(range(NumEpisodes)):
         done = terminated or truncated
 
         # calculate losses and update 
-        critic_loss = calculate_loss_critic(critic, state, new_state, reward, done)
-        c_l_d = critic_loss.detach()
+        delta_v, critic_loss = calculate_loss_critic(critic, state, new_state, reward, done)
+        delta_v_d = delta_v.detach()
         critic_optimizer.zero_grad()
         critic_loss.backward(retain_graph=True)
         critic_optimizer.step()
 
         #critic_loss = calculate_loss_critic(critic, state, new_state, reward, done)
-        actor_loss = calculate_loss_actor(actor, action, state, c_l_d)
+        actor_loss = calculate_loss_actor(actor, action, state, delta_v_d)
         actor_optimizer.zero_grad()
         actor_loss.backward()
         actor_optimizer.step()
