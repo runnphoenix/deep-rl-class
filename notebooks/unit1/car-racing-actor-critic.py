@@ -21,7 +21,8 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 action_len = 5
 
 LearningRate = 1e-5
-NumEpisodes = 300
+NumEpisodes = 3000
+NumEval = 10
 Gamma = 0.99
 
 class Actor(nn.Module):   
@@ -32,7 +33,6 @@ class Actor(nn.Module):
         self.conv2 = nn.Conv2d(8, 16, 3, stride=2)
         self.fc1 = nn.Linear(7744, 256)
         self.fc2 = nn.Linear(256, action_len)
-    
  
     def forward(self, x):
         x = F.relu(self.conv1(x))
@@ -49,7 +49,7 @@ class Critic(nn.Module):
         self.conv1 = nn.Conv2d(3, 8, 5, stride=2)
         self.conv2 = nn.Conv2d(8, 16, 3, stride=2)
         self.fc_v1 = nn.Linear(7744, 256)
-        self.fc_v2 = nn.Linear(256, action_len)
+        self.fc_v2 = nn.Linear(256, 1)
 
     def forward(self, x):
         x = F.relu(self.conv1(x))
@@ -81,23 +81,15 @@ def calculate_loss_actor(model, action, state, reward):
 
     return loss.mean()
 
-def calculate_q(model, state, action):
-    state = torch.FloatTensor(state).reshape(-1,3,96,96).to(device)
-    action = torch.LongTensor([action]).reshape(-1,1).to(device)
-    
-    return model(state).gather(1, action)
+def calculate_loss_critic(model, state, new_state, reward, done):
+    state = torch.FloatTensor(np.array(state)).reshape(-1,3,96,96).to(device)
+    new_state = torch.FloatTensor(np.array(new_state)).reshape(-1,3,96,96).to(device)
+    loss =  0.5 * F.mse_loss(reward + Gamma * model(new_state) * (1-done),  model(state))
 
-def calculate_loss_critic(model, state, action, reward, new_state, new_action):
-    current_q = calculate_q(model, state, action)
-    target_q = calculate_q(model, new_state, new_action)
-
-    target = target_q - current_q
-
-    return target
-
+    return loss
 
 def record_episode(actor, episode_idx):
-    num_record_per_episode = 2
+    num_record_per_episode = 1
 
     env = gym.make("CarRacing-v2", render_mode="rgb_array", continuous=False)
     env = RecordVideo(env, video_folder="car-racing-actor-critic", name_prefix="training-{}".format(episode_idx), 
@@ -137,63 +129,53 @@ for i in tqdm(range(NumEpisodes)):
     state, info = env.reset()
     epi_score = 0
     epi_step = 0
-    epi_rewards = []
 
     # Train one episode
     while True: 
         # select an action
         action = select_action(state, actor)
-        current_q = calculate_q(critic, state, action)
 
         # receive env update
         new_state, reward, terminated, truncated, info = env.step(action)
-
-        #print("Truncated") if truncated else None
         done = terminated or truncated
+
+        # calculate losses and update 
+        critic_loss = calculate_loss_critic(critic, state, new_state, reward, done)
+        c_l_d = critic_loss.detach()
+        critic_optimizer.zero_grad()
+        critic_loss.backward(retain_graph=True)
+        critic_optimizer.step()
+
+        #critic_loss = calculate_loss_critic(critic, state, new_state, reward, done)
+        actor_loss = calculate_loss_actor(actor, action, state, c_l_d)
+        actor_optimizer.zero_grad()
+        actor_loss.backward()
+        actor_optimizer.step()
+
+        # update new step
+        epi_step += 1
+        state = new_state
+        epi_score += reward
+
+        # if Done
         if done:# Consider Only Complete Trajectories 
             episode_scores.append(epi_score)
             episode_steps.append(epi_step)
 
             break
 
-        # update parameters of actor
-        loss_actor = calculate_loss_actor(actor, action, state, current_q)
-        actor_optimizer.zero_grad()
-        loss_actor.backward(retain_graph=True)
-        actor_optimizer.step()
-
-        # select a new action by actor
-        new_action = select_action(new_state, actor)
-
-        # update critic
-        next_q = calculate_q(critic, new_state, new_action)
-        loss_critic = next_q - current_q
-
-        critic_optimizer.zero_grad()
-        loss_critic.backward()
-        critic_optimizer.step()
-
-        # update new step
-        epi_step += 1
-        state = new_state
-        epi_score += reward
-        epi_rewards.append(reward)
-
-
     critic_scheduler.step()
     actor_scheduler.step()
 
-    if i % 1 == 0:
+    if i % NumEval == 0:
         # print info of each batch
         print('-' * 80)
-        print("Score of episode {}: {}".format(i, np.mean(episode_scores[-1])))
+        print("Score of episode {}: {}".format(i, np.mean(episode_scores[-NumEval:])))
         print("Lr of batch {}: {}".format(i, actor_optimizer.param_groups[0]['lr']))
 
         record_episode(actor, i)
 
 
-#print(episode_scores)
-#print(episode_steps)
 torch.save(pg.state_dict(), './trained_car-actor-critic.pth')
 
 with open('car-actor-critic-scores.csv', 'w', newline='') as file:
