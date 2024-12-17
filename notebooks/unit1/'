@@ -23,9 +23,8 @@ action_len = 4
 
 LearningRateActor  = 5e-4
 LearningRateCritic = 5e-3
-NumEpisodes = 2000
+NumEpisodes = 5000
 NumEval = 100
-BatchSize = 3
 Gamma = 0.99
 
 class Net(nn.Module):
@@ -45,8 +44,8 @@ class Net(nn.Module):
         return self.net(x)
 
 # Create memory and Q-Net
-actor = Net([8,64,32,4]).to(device)
-critic = Net([8,64,8,1]).to(device)
+actor = Net([8,32,64,32,4]).to(device)
+critic = Net([8,32,64,32,1]).to(device)
 
 def get_policy(model, state):
     prob = model(torch.FloatTensor(np.array(state)).to(device))
@@ -116,7 +115,7 @@ episode_steps = []
 
 # Train
 #TODO: Decide which modification works: 1. diff lr for actor and critic 2. new value for critic
-for i in tqdm(range(1, NumEpisodes+1)):
+for i in tqdm(range(NumEpisodes)):
     state, info = env.reset()
     epi_score = 0
     epi_step = 0
@@ -143,13 +142,17 @@ for i in tqdm(range(1, NumEpisodes+1)):
         rewards.append(reward)
         dones.append(done)
 
+
         # update new step
         epi_step += 1
         state = new_state
         epi_score += reward
 
         # if Done
-        if done or len(states) == BatchSize:# Consider Only Complete Trajectories 
+        if done:# Consider Only Complete Trajectories 
+            episode_scores.append(epi_score)
+            episode_steps.append(epi_step)
+
             # calculate losses and update 
             delta_v, critic_loss = calculate_loss_critic(critic, states, new_states, rewards, dones)
             delta_v_d = delta_v.detach()
@@ -162,12 +165,7 @@ for i in tqdm(range(1, NumEpisodes+1)):
             actor_loss.backward()
             actor_optimizer.step()
 
-            if done:
-                episode_scores.append(epi_score)
-                episode_steps.append(epi_step)
-                break
-            if len(states) == BatchSize:
-                states, new_states, actions, rewards, dones = [],[],[],[],[]
+            break
 
     critic_scheduler.step()
     actor_scheduler.step()
